@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<style>
+body {
+	background-color: #d8d8d8;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 12pt;
+	color: #000066;
+}
+div.entirePage{
+	margin: auto;
+	width: 1425px;
+}
+span.input {
+	float:left;
+	width: 200px;
+}
+div.next_line {
+	clear:both
+}
+span.title{
+	text-align:center;
+}
+span.brief{
+	text-align:center;
+}
+</style>
+<body>
+<div class="entirePage">
+<div class="next_line">
+<span class="title"><h1>Image to Surface<h1></span>
+</div>
+<div class="next_line">
+<span class="brief"> 	This page designed to take an image, down-sample that image and covert it to a surface for openSCAD. Currently you can export the surface in 3 different ways: a simple surface, a surface to be wrapped on the outside of a cylinder, and a surface to be wrapped on the inside of a cylinder. Since wrapping a cylinder can take a substantial amount of memory, the surface needs to be broken up into several sub surfaces and to help you along, the scad script for combining these is included with the download.</span>
+</div>
+<div class="next_line">
+<img id="scream" src="http://camerinhahn.com/teapot.jpg" alt="The Scream" onload="reload()">
+<canvas id="myCanvas" width="700" height="700" style="border:1px solid #d3d3d3;" onchange="reload()">
+Your browser does not support the HTML5 canvas tag.</canvas>
+</div>
+<div class="next_line">
+<span class="input">Down-sample</span><span class="input"><input type="text" id="samples" value="10" onchange="reload()"></span>
+<span class="input">Number of Files</span><span class="input"><input type="text" id="num_files" value="10" onchange="reload()"></span>
+</div>
+<div class="next_line">
+<span class="input">Minimum Thickness</span><span class="input"><input type="text" id="t_min" value="1"></span>
+<span class="input">Maximum Thickness</span><span class="input"><input type="text" id="t_max" value="4"></span>
+</div>
+<div class="next_line">
+<span class="input">Cylinder Radius</span><span class="input"><input type="text" id="c_r" value="30"></span>
+<span class="input">Cylinder Height</span><span class="input"><input type="text" id="c_h" value="60"></span>
+</div>
+<div class="next_line">
+<span class="input">Wall Thickness</span><span class="input"><input type="text" id="c_t" value="3.75"></span>
+<span class="input">Border</span><span class="input"><input type="text" id="c_b" value="5"></span>
+</div>
+<div class="next_line">
+<span class="input">Mount Holes Radius</span><span class="input"><input type="text" id="m_r" value="1.5"></span>
+<span class="input">Project Name</span><span class="input"><input type="text" id="name" value="teapot"></span>
+</div>
+<div class="next_line">
+<span class="input">Inverted Surface *</span><span class="input"><input type="checkbox" id="invert"></span>
+<span>
+<input type="file" id="files" name="files[]" multiple />
+</span>
+</div>
+<div class="next_line">
+<span class="input">
+<button type="button" onclick="download_surface()">Download Surface Only</button>
+</span>
+<span class="input">
+<button type="button" onclick="download_image_on_exterior()">Cylinder-Exterior</button>
+</span>
+<span class="input">
+<button type="button" onclick="make_jar()">Make Jar</button>
+</span>
+<span class="input">
+<button type="button" onclick="download_image_on_interior()">Cylinder-Interior</button>
+</span>
+</div>
+</div>
+<script>
+function make_jar(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var downsample=5;
+	var t_max = document.getElementById("t_max").value;
+	var t_min =document.getElementById("t_min").value;
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	var pixels = new Array();
+	var test;
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		pixels[n/downsample] = new Array();
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			grey=0.21*imgData.data[i] + 0.71*imgData.data[i+1] + 0.07*imgData.data[i+2];
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+			if(document.getElementById("invert").checked){
+				grey=255-grey;
+			}
+			pixels[n/downsample][m/downsample]=Math.round(100*(grey*(t_max-t_min)/255+t_min))/100;
+		}
+	}	
+	
+	ctx.putImageData(imgData,0,0);
+	
+	ctx.drawImage(myCanvas,0,0);
+	var num_files = document.getElementById("num_files").value
+	var num_columns=(Math.round(pixels[1].length/num_files));
+	var temp;
+	var download_file=true;
+	var files_left=num_files;
+	var cur_row=0;
+	for (var cur_file = 0 ;cur_file<num_files;cur_file+=1){
+		var out='#'+document.getElementById("name").value+cur_file+'.dat ';
+		var test = new Array();
+		for (var cur_row = 1;cur_row<pixels.length;cur_row+=1){
+			test[cur_row] = new Array();
+			for (var cur_col = num_columns*(cur_file);cur_col<num_columns*(cur_file+1)+2;cur_col+=1){
+				if ((cur_col<pixels[1].length)&&(cur_row<pixels[1].length)){
+					test[cur_row][cur_col]=pixels[cur_row][cur_col];
+				}
+			}
+			if (test[cur_row].length==0){
+				download_file=false;
+			}
+				temp=test[cur_row].toString();
+				temp=temp.split(',');
+				temp=temp.join(' ');
+				out=out+'\r\n' +temp;
+			//alert(cur_col.toString()+' '+cur_row.toString()+' '+cur_file.toString() + temp);
+		}
+		if (download_file){
+			var downloadLink = document.createElement("a");
+			downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+			downloadLink.download = document.getElementById("name").value+(cur_file+1)+".dat";
+			document.body.appendChild(downloadLink);
+			downloadLink.click();
+			document.body.removeChild(downloadLink);
+			files_left=files_left-1;
+		}
+	}
+	var out='//'+document.getElementById("name").value + '.scad \r\n';
+	out = out+'r='+document.getElementById("c_r").value+';\r\n';
+	out = out+'h='+document.getElementById("c_h").value+';\r\n';
+	out = out+'pixels='+pixels.length+';\r\n';
+	out = out+'pixles_w='+pixels[1].length+';\r\n';
+	out = out+'thickness='+document.getElementById("c_t").value+';\r\n';
+	out = out+'border='+document.getElementById("c_b").value+';\r\n';
+	out = out+'hole_r='+document.getElementById("m_r").value+';\r\n';
+	out = out+'num_files='+num_files+';\r\n';
+	out = out+'image_size=(h-border*2);\r\n';
+	out = out+'scale_xy=image_size/pixels;\r\n';
+	out = out+'difference(){\r\n';
+	out = out+'	cylinder(r=r,h=h);\r\n';
+	out = out+'	translate([0,0,thickness])cylinder(r=r-thickness,h=h);\r\n';
+	out = out+'	for (i=[1:num_files-'+files_left+']){\r\n';
+	out = out+'		rotate([0,0,(i-1)*180*scale_xy*pixles_w/(3.14*r*num_files)])translate([-scale_xy*pixles_w/(2*num_files),-r,border+image_size])rotate([-90,0,0])scale([scale_xy,scale_xy,1])surface(file =str( "'+document.getElementById("name").value+'",i ,".dat"), convexity = 5);\r\n';
+	out = out+'}\r\n';
+	out = out+'}\r\n';
+	out = out+'union(){';
+	out = out+'translate([0,r*2+4,0])cylinder(r=r,h=border/2);';
+	out = out+'translate([0,r*2+4,0])cylinder(r=r-.5-thickness,h=border);';
+	out = out+'}';
+	
+	
+	var downloadLink = document.createElement("a");
+	downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+	downloadLink.download = document.getElementById("name").value+".scad";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+	document.body.removeChild(downloadLink);
+}
+
+function download_image_on_interior(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var downsample=5;
+	var t_max = document.getElementById("t_max").value;
+	var t_min =document.getElementById("t_min").value;
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	var pixels = new Array();
+	var test;
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		pixels[n/downsample] = new Array();
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			grey=0.21*imgData.data[i] + 0.71*imgData.data[i+1] + 0.07*imgData.data[i+2];
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+			if(document.getElementById("invert").checked){
+				grey=255-grey;
+			}
+			pixels[n/downsample][m/downsample]=Math.round(100*(grey*(t_max-t_min)/255+t_min))/100;
+		}
+	}	
+	
+	ctx.putImageData(imgData,0,0);
+	
+	ctx.drawImage(myCanvas,0,0);
+	var num_files = document.getElementById("num_files").value
+	var num_columns=(Math.round(pixels[1].length/num_files));
+	var temp;
+	var download_file=true;
+	var files_left=num_files;
+	var cur_row=0;
+	for (var cur_file = 0 ;cur_file<num_files;cur_file+=1){
+		var out='#'+document.getElementById("name").value+cur_file+'.dat ';
+		var test = new Array();
+		for (var cur_row = 1;cur_row<pixels.length;cur_row+=1){
+			test[cur_row] = new Array();
+			for (var cur_col = num_columns*(cur_file);cur_col<num_columns*(cur_file+1)+2;cur_col+=1){
+				if ((cur_col<pixels[1].length)&&(cur_row<pixels[1].length)){
+					test[cur_row][cur_col]=pixels[cur_row][cur_col];
+				}
+			}
+			if (test[cur_row].length==0){
+				download_file=false;
+			}
+				temp=test[cur_row].toString();
+				temp=temp.split(',');
+				temp=temp.join(' ');
+				out=out+'\r\n' +temp;
+			//alert(cur_col.toString()+' '+cur_row.toString()+' '+cur_file.toString() + temp);
+		}
+		if (download_file){
+			var downloadLink = document.createElement("a");
+			downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+			downloadLink.download = document.getElementById("name").value+(cur_file+1)+".dat";
+			document.body.appendChild(downloadLink);
+			downloadLink.click();
+			document.body.removeChild(downloadLink);
+			files_left=files_left-1;
+		}
+	}
+	var out='//'+document.getElementById("name").value + '.scad \r\n';
+	out = out+'r='+document.getElementById("c_r").value+';\r\n';
+	out = out+'h='+document.getElementById("c_h").value+';\r\n';
+	out = out+'pixels='+pixels.length+';\r\n';
+	out = out+'pixles_w='+pixels[1].length+';\r\n';
+	out = out+'thickness='+document.getElementById("c_t").value+';\r\n';
+	out = out+'border='+document.getElementById("c_b").value+';\r\n';
+	out = out+'hole_r='+document.getElementById("m_r").value+';\r\n';
+	out = out+'num_files='+num_files+';\r\n';
+	out = out+'image_size=(h-border*2);\r\n';
+	out = out+'scale_xy=image_size/pixels;\r\n';
+	out = out+'difference(){\r\n';
+	out = out+'	cylinder(r=r,h=h);\r\n';
+	out = out+'	translate([0,0,-h/2])cylinder(r=r-thickness,h=2*h);\r\n';
+	out = out+'	for (i=[1:num_files-'+files_left+']){\r\n';
+	out = out+'		rotate([0,0,(1-i)*180*scale_xy*pixles_w/(3.14*(r-thickness)*num_files)])translate([-scale_xy*pixles_w/(2*num_files),r-thickness-'+(t_min)/2+',border+image_size])rotate([-90,0,0])scale([scale_xy,scale_xy,1])surface(file =str( "'+document.getElementById("name").value+'",i ,".dat"), convexity = 5);\r\n';
+	out = out+'}\r\n';
+	out = out+'	for(i=[1:4]){	\r\n';
+	out = out+'		rotate([0,0,90*i+(num_files/2)*180*scale_xy*pixles_w/(3.14*r*num_files)])translate([-scale_xy*pixles_w/(2*num_files),r/2,border*1.5+image_size])rotate([-90,0,0])cylinder(r=hole_r,h=r);\r\n';
+	out = out+'}\r\n';
+	out = out+'}\r\n';
+	var downloadLink = document.createElement("a");
+	downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+	downloadLink.download = document.getElementById("name").value+".scad";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+	document.body.removeChild(downloadLink);
+}
+function download_image_on_exterior(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var downsample=5;
+	var t_max = document.getElementById("t_max").value;
+	var t_min =document.getElementById("t_min").value;
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	var pixels = new Array();
+	var test;
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		pixels[n/downsample] = new Array();
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			grey=0.21*imgData.data[i] + 0.71*imgData.data[i+1] + 0.07*imgData.data[i+2];
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+			if(document.getElementById("invert").checked){
+				grey=255-grey;
+			}
+			pixels[n/downsample][m/downsample]=Math.round(100*(grey*(t_max-t_min)/255+t_min))/100;
+		}
+	}	
+	
+	ctx.putImageData(imgData,0,0);
+	
+	ctx.drawImage(myCanvas,0,0);
+	var num_files = document.getElementById("num_files").value
+	var num_columns=(Math.round(pixels[1].length/num_files));
+	var temp;
+	var download_file=true;
+	var files_left=num_files;
+	var cur_row=0;
+	for (var cur_file = 0 ;cur_file<num_files;cur_file+=1){
+		var out='#'+document.getElementById("name").value+cur_file+'.dat ';
+		var test = new Array();
+		for (var cur_row = 1;cur_row<pixels.length;cur_row+=1){
+			test[cur_row] = new Array();
+			for (var cur_col = num_columns*(cur_file);cur_col<num_columns*(cur_file+1)+3;cur_col+=1){
+				if ((cur_col<pixels[1].length)&&(cur_row<pixels[1].length)){
+					test[cur_row][cur_col]=pixels[cur_row][cur_col];
+				}
+			}
+			if (test[cur_row].length==0){
+				download_file=false;
+			}
+				temp=test[cur_row].toString();
+				temp=temp.split(',');
+				temp=temp.join(' ');
+				out=out+'\r\n' +temp;
+			//alert(cur_col.toString()+' '+cur_row.toString()+' '+cur_file.toString() + temp);
+		}
+		if (download_file){
+			var downloadLink = document.createElement("a");
+			downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+			downloadLink.download = document.getElementById("name").value+(cur_file+1)+".dat";
+			document.body.appendChild(downloadLink);
+			downloadLink.click();
+			document.body.removeChild(downloadLink);
+			files_left=files_left-1;
+		}
+	}
+	var out='//'+document.getElementById("name").value + '.scad \r\n';
+	out = out+'r='+document.getElementById("c_r").value+';\r\n';
+	out = out+'h='+document.getElementById("c_h").value+';\r\n';
+	out = out+'pixels='+pixels.length+';\r\n';
+	out = out+'pixles_w='+pixels[1].length+';\r\n';
+	out = out+'thickness='+document.getElementById("c_t").value+';\r\n';
+	out = out+'border='+document.getElementById("c_b").value+';\r\n';
+	out = out+'hole_r='+document.getElementById("m_r").value+';\r\n';
+	out = out+'num_files='+num_files+';\r\n';
+	out = out+'image_size=(h-border*2);\r\n';
+	out = out+'scale_xy=image_size/pixels;\r\n';
+	out = out+'difference(){\r\n';
+	out = out+'	cylinder(r=r,h=h);\r\n';
+	out = out+'	translate([0,0,-h/2])cylinder(r=r-thickness,h=2*h);\r\n';
+	out = out+'	for (i=[1:num_files-'+files_left+']){\r\n';
+	out = out+'		rotate([0,0,(i-1)*180*scale_xy*pixles_w/(3.14*r*num_files)])translate([-scale_xy*pixles_w/(2*num_files),-r,border+image_size])rotate([-90,0,0])scale([scale_xy,scale_xy,1])surface(file =str( "'+document.getElementById("name").value+'",i ,".dat"), convexity = 5);\r\n';
+	out = out+'}\r\n';
+	out = out+'	for(i=[1:4]){	\r\n';
+	out = out+'		rotate([0,0,90*i+(num_files/2)*180*scale_xy*pixles_w/(3.14*r*num_files)])translate([-scale_xy*pixles_w/(2*num_files),r/2,border*1.5+image_size])rotate([-90,0,0])cylinder(r=hole_r,h=r);\r\n';
+	out = out+'}\r\n';
+	out = out+'}\r\n';
+	var downloadLink = document.createElement("a");
+	downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+	downloadLink.download = document.getElementById("name").value+".scad";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+	document.body.removeChild(downloadLink);
+}
+
+function reload(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+		}
+	}	
+	ctx.putImageData(imgData,0,0);
+	ctx.drawImage(myCanvas,0,0);
+}
+function download_surface(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var downsample=5;
+	var t_max = document.getElementById("t_max").value;
+	var t_min =document.getElementById("t_min").value;
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	var pixels = new Array();
+	var test;
+	var out='#'+document.getElementById("name").value+'.dat ';
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		pixels[n/downsample] = new Array();
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			grey=0.21*imgData.data[i] + 0.71*imgData.data[i+1] + 0.07*imgData.data[i+2];
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+			if(document.getElementById("invert").checked){
+				grey=255-grey;
+			}
+			pixels[n/downsample][m/downsample]=Math.round(100*(grey*(t_max-t_min)/255+t_min))/100;
+		}
+		test=pixels[n/downsample].toString();
+		test=test.split(',');
+		test=test.join(' ');
+		out=out+'\r\n' +test;
+	}	
+	
+	ctx.putImageData(imgData,0,0);
+	
+	ctx.drawImage(myCanvas,0,0);
+	
+	var downloadLink = document.createElement("a");
+	downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+	downloadLink.download = document.getElementById("name").value+".dat";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+	document.body.removeChild(downloadLink);
+}
+
+function onLoad(evt) {
+        /* do sth with evt.target.result - it image in base64 format ("data:image/jpeg;base64,....") */
+        localStorage.setItem('image', evt.target.result);
+        document.getElementById('scream').src = evt.target.result;
+    };
+
+    function handleFileUpload(evt) {
+        var files = evt.target.files; // FileList object
+
+        for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+
+            // Only process image files.
+            if (!f.type.match('image.*')) {
+                continue;
+            }
+
+            var reader = new FileReader();
+            reader.onload = onLoad;
+            reader.readAsDataURL(f);
+        }
+    }
+
+    document.getElementById('files').addEventListener('change', handleFileUpload, false);
+
+    var image = localStorage.getItem('scream');
+    if (image !== null) {
+        document.getElementById('scream').src = image;
+    }
+</script>
+
+</body>
+</html>
