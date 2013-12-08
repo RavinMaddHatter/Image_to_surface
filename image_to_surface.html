@@ -78,8 +78,145 @@ Your browser does not support the HTML5 canvas tag.</canvas>
 <button type="button" onclick="download_image_on_interior()">Cylinder-Interior</button>
 </span>
 </div>
+<div class="next_line">
+<span class="input">
+<button type="button" onclick="make_globe()">Impress on Sphere</button>
+</span>
+</div>
 </div>
 <script>
+function make_globe(){
+	var c=document.getElementById("myCanvas");
+	var ctx=c.getContext("2d");
+	var img=document.getElementById("scream");
+	if(img.width>img.height){
+		var Size=700/img.width;
+		var w=700;
+		h=Size*img.height;
+	}else{
+		var Size=700/img.height;
+		var h=700;
+		w=Size*img.height;
+	}
+	img.width=w;
+	img.height=h;
+	c.width=w;
+	c.height=h;
+	ctx.drawImage(img,0,0,w,h);
+	var downsample=5;
+	var t_max = document.getElementById("t_max").value;
+	var t_min =document.getElementById("t_min").value;
+	var imgData=ctx.getImageData(0,0,c.width,c.height);
+	var downsample=document.getElementById("samples").value;
+	downsample=parseFloat(downsample);
+	var pixels = new Array();
+	var test;
+	
+	for (var n=0;n<c.height;n+=1*downsample){
+		pixels[n/downsample] = new Array();
+		for(var m=0;m<c.width;m+=1*downsample){
+			i=(c.width*n+m)*4
+			grey=0.21*imgData.data[i] + 0.71*imgData.data[i+1] + 0.07*imgData.data[i+2];
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i]  =0;
+			imgData.data[i+1]=0;
+			imgData.data[i+2]=0;
+			imgData.data[i+3]=255;
+			imgData.data[i-4]  =255;
+			imgData.data[i+1-4]=255;
+			imgData.data[i+2-4]=255;
+			imgData.data[i+3-4]=255;
+			imgData.data[i+4]  =255;
+			imgData.data[i+1+4]=255;
+			imgData.data[i+2+4]=255;
+			imgData.data[i+3+4]=255;
+			if(document.getElementById("invert").checked){
+				grey=255-grey;
+			}
+			pixels[n/downsample][m/downsample]=Math.round(100*(grey*(t_max-t_min)/255+t_min))/100;
+		}
+	}	
+	
+	ctx.putImageData(imgData,0,0);
+	
+	ctx.drawImage(myCanvas,0,0);
+	var num_files = document.getElementById("num_files").value
+	var num_columns=(Math.round(pixels[1].length/num_files));
+	var num_rows=(Math.round(pixels.length/num_files));
+	var temp;
+	var files_left=num_files;
+	var cur_row=0;
+	var files_x=0;
+	var files_y=0;
+	for (var cur_file_y = 0 ;cur_file_y<num_files;cur_file_y+=1){
+		var download_file=true;
+		for (var cur_file_x=0;cur_file_x<num_files;cur_file_x+=1){
+			var out='#'+document.getElementById("name").value+'_x_'+(cur_file_x+1)+'_y_'+(cur_file_y+1)+'.dat ';
+			var test = new Array();
+			for (var cur_row = num_rows*(cur_file_y);cur_row<num_rows*(cur_file_y+1)+2;cur_row+=1){
+				test[cur_row] = new Array();
+				for (var cur_col = num_columns*(cur_file_x);cur_col<num_columns*(cur_file_x+1)+2;cur_col+=1){
+					if ((cur_col<pixels[1].length)&&(cur_row<pixels[1].length)){
+						test[cur_row][cur_col]=pixels[cur_row][cur_col];
+					}
+				}
+				if (test[cur_row].length==0){
+					download_file=false;
+				}
+					temp=test[cur_row].toString();
+					temp=temp.split(',');
+					temp=temp.join(' ');
+					out=out+'\r\n' +temp;
+				//alert(cur_col.toString()+' '+cur_row.toString()+' '+cur_file.toString() + temp);
+			}
+			if (download_file){
+				var downloadLink = document.createElement("a");
+				downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+				downloadLink.download = document.getElementById("name").value+'_x_'+(cur_file_x+1)+'_y_'+(cur_file_y+1)+".dat";
+				document.body.appendChild(downloadLink);
+				downloadLink.click();
+				document.body.removeChild(downloadLink);
+				files_x=files_x+1;
+			}
+		}
+		if((download_file)){
+			files_y=files_y+1;
+		}
+	}
+	files_x=files_x/files_y;
+	out='//'+document.getElementById("name").value+".scad\r\n";
+	out = out + 'r='+document.getElementById("c_r").value+';\n\r';
+	out = out + 'num_x=' + files_x + ';\n\r';
+	out = out + 'num_y='+ files_y + ';\n\r';
+	out = out + 'num_files='+num_files+';\n\r';
+	out = out + 'd=' + (t_max-t_min) + ';\n\r';
+	out = out + 'pixels_x=' + pixels[1].length + ';\r\n';
+	out = out + 'pixels_y=' + pixels.length + ';\r\n';
+	out = out + 'image_percent=.50;\r\n';
+	out = out + 'picture_h=3.14*r*image_percent;\r\n';
+	out = out + 'scale_pic=picture_h/(pixels_y);\r\n';
+	out = out + 'cell_size_x=pixels_x*scale_pic/num_x;\r\n';
+	out = out + 'cell_size_y=pixels_y*scale_pic/num_y;\r\n';
+	out = out + 'difference(){\r\n';
+	out = out + '	sphere(r=r);\r\n';
+	out = out + '	for(j=[1:num_y]){\r\n';
+	out = out + '		for(i=[1:num_x]){\r\n';
+	out = out + '			rotate([0,0,(i)*cell_size_x*180/(3.14*(r+d))])rotate([90*image_percent+(-j)*cell_size_y*180/(3.14*(r+d)),0,0])translate([cell_size_x/2,r,cell_size_y/2])rotate([90,0,0])rotate([0,0,180])scale([scale_pic,scale_pic,1])surface(file =str( "teapot_x_",i,"_y_",j ,".dat"), convexity = 5);\r\n';
+	out = out + '		}\r\n';
+	out = out + '	}\r\n';
+	out = out + '}\r\n';
+	var downloadLink = document.createElement("a");
+	downloadLink.href = 'data:Application/octet-stream,' + encodeURIComponent(out);
+	downloadLink.download = document.getElementById("name").value+".scad";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+	document.body.removeChild(downloadLink);
+}
+
+
 function make_jar(){
 	var c=document.getElementById("myCanvas");
 	var ctx=c.getContext("2d");
